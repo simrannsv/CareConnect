@@ -1,5 +1,5 @@
 import Quote from '../models/Quote.js';
-import ServiceRequest from '../models/ServiceRequest.js';
+import ServiceRequest from '../models/Servicerequest.js';
 import Provider from '../models/Provider.js';
 import asyncHandler from '../utils/asyncHandler.js';
 

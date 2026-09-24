@@ -1,7 +1,7 @@
 import Booking from '../models/Booking.js';
 import Quote from '../models/Quote.js';
 import Provider from '../models/Provider.js';
-import ServiceRequest from '../models/ServiceRequest.js';
+import ServiceRequest from '../models/Servicerequest.js';
 import Review from '../models/Review.js';
 import asyncHandler from '../utils/asyncHandler.js';
 import { isWithinSlots, hasBookingConflict } from '../services/availabilityService.js';

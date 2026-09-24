@@ -1,6 +1,6 @@
 import User from '../models/User.js';
 import Provider from '../models/Provider.js';
-import ServiceRequest from '../models/ServiceRequest.js';
+import ServiceRequest from '../models/Servicerequest.js';
 import Quote from '../models/Quote.js';
 import Booking from '../models/Booking.js';
 import Review from '../models/Review.js';
