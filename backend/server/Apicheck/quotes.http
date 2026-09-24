@@ -1,0 +1,275 @@
+@baseUrl = http://localhost:5000/api
+@adminToken = {{loginAdmin.response.body.$.data.token}}
+@customerToken = {{loginCustomer.response.body.$.data.token}}
+@customer2Token = {{loginCustomer2.response.body.$.data.token}}
+@providerToken = {{loginProvider.response.body.$.data.token}}
+@provider2Token = {{loginProvider2.response.body.$.data.token}}
+@categoryId = {{listCategories.response.body.$.data[0]._id}}
+@provider2Id = {{provider2Profile.response.body.$.data._id}}
+@requestId = {{createRequest.response.body.$.data._id}}
+@request2Id = {{createRequest2.response.body.$.data._id}}
+@request3Id = {{createRequest3.response.body.$.data._id}}
+@quote1Id = {{createQuote1.response.body.$.data._id}}
+@quote2Id = {{createQuote2.response.body.$.data._id}}
+
+# Before running: seed admin, register users (auth.http), create categories,
+# and finish providers.http (provider@test.com verified, in the first category).
+# This file sets up a second provider (provider2) by itself.
+
+###############################################
+# LOGINS AND SETUP (run these first, in order)
+###############################################
+
+### Login admin -> 200
+# @name loginAdmin
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "admin@careconnect.com", "password": "admin123" }
+
+### Login customer -> 200
+# @name loginCustomer
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "customer@test.com", "password": "123456" }
+
+### Register second customer -> 201 (409 on re-run is fine)
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{ "name": "Second Customer", "email": "customer2@test.com", "password": "123456", "role": "customer" }
+
+### Login second customer -> 200
+# @name loginCustomer2
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "customer2@test.com", "password": "123456" }
+
+### Login provider -> 200
+# @name loginProvider
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "provider@test.com", "password": "123456" }
+
+### Register second provider -> 201 (409 on re-run is fine)
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{ "name": "Second Provider", "email": "provider2@test.com", "password": "123456", "role": "provider" }
+
+### Login second provider -> 200
+# @name loginProvider2
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "provider2@test.com", "password": "123456" }
+
+### Get category ids (public) -> 200
+# @name listCategories
+GET {{baseUrl}}/categories
+
+### Second provider: own profile (gives the profile id) -> 200
+# @name provider2Profile
+GET {{baseUrl}}/providers/me
+Authorization: Bearer {{provider2Token}}
+
+### Second provider: fill profile -> 200
+PUT {{baseUrl}}/providers/me
+Authorization: Bearer {{provider2Token}}
+Content-Type: application/json
+
+{
+  "categories": ["{{categoryId}}"],
+  "skills": ["pipe repair", "tap installation"],
+  "serviceAreas": ["vanasthalipuram"],
+  "basePrice": 450,
+  "experienceYears": 3
+}
+
+### Admin: verify second provider -> 200
+PUT {{baseUrl}}/providers/{{provider2Id}}/verify
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{ "isVerified": true }
+
+
+###############################################
+# HAPPY PATH (run top to bottom)
+###############################################
+
+### Customer: create request -> 201
+# @name createRequest
+POST {{baseUrl}}/requests
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{
+  "description": "Kitchen tap is leaking water all day and the pipe below is wet",
+  "location": "Vanasthalipuram",
+  "category": "{{categoryId}}"
+}
+
+### Provider 1: send quote -> 201, request becomes quoted
+# @name createQuote1
+POST {{baseUrl}}/quotes
+Authorization: Bearer {{providerToken}}
+Content-Type: application/json
+
+{ "requestId": "{{requestId}}", "price": 700, "message": "Can fix it tomorrow morning" }
+
+### Provider 2: send quote -> 201
+# @name createQuote2
+POST {{baseUrl}}/quotes
+Authorization: Bearer {{provider2Token}}
+Content-Type: application/json
+
+{ "requestId": "{{requestId}}", "price": 550, "message": "Available today evening" }
+
+### Request status is now quoted -> 200
+GET {{baseUrl}}/requests/{{requestId}}
+Authorization: Bearer {{customerToken}}
+
+### Provider 1: my quotes -> 200
+GET {{baseUrl}}/quotes/mine
+Authorization: Bearer {{providerToken}}
+
+### Provider 1: my pending quotes only -> 200
+GET {{baseUrl}}/quotes/mine?status=pending
+Authorization: Bearer {{providerToken}}
+
+### Customer: quotes on my request -> 200, 2 quotes, cheapest first
+GET {{baseUrl}}/requests/{{requestId}}/quotes
+Authorization: Bearer {{customerToken}}
+
+### Admin: quotes on the request -> 200
+GET {{baseUrl}}/requests/{{requestId}}/quotes
+Authorization: Bearer {{adminToken}}
+
+### Customer: accept provider 1's quote -> 200, status = accepted
+PUT {{baseUrl}}/quotes/{{quote1Id}}/accept
+Authorization: Bearer {{customerToken}}
+
+### Customer: quotes again -> 200, provider 2's quote is now rejected
+GET {{baseUrl}}/requests/{{requestId}}/quotes
+Authorization: Bearer {{customerToken}}
+
+### Customer: accept the rejected quote -> 400
+PUT {{baseUrl}}/quotes/{{quote2Id}}/accept
+Authorization: Bearer {{customerToken}}
+
+
+###############################################
+# CANCELLING A REQUEST REJECTS ITS QUOTES
+###############################################
+
+### Customer: create another request -> 201
+# @name createRequest3
+POST {{baseUrl}}/requests
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{
+  "description": "Bathroom pipe joint is dripping slowly, needs a look",
+  "location": "Vanasthalipuram",
+  "category": "{{categoryId}}"
+}
+
+### Provider 1: quote it -> 201
+POST {{baseUrl}}/quotes
+Authorization: Bearer {{providerToken}}
+Content-Type: application/json
+
+{ "requestId": "{{request3Id}}", "price": 400 }
+
+### Customer: cancel that request -> 200
+PUT {{baseUrl}}/requests/{{request3Id}}/cancel
+Authorization: Bearer {{customerToken}}
+
+### Customer: its quotes -> 200, the quote is rejected
+GET {{baseUrl}}/requests/{{request3Id}}/quotes
+Authorization: Bearer {{customerToken}}
+
+
+###############################################
+# FAILURE CASES
+###############################################
+
+### Send quote without token -> 401
+POST {{baseUrl}}/quotes
+Content-Type: application/json
+
+{ "requestId": "{{requestId}}", "price": 500 }
+
+### Customer sends a quote -> 403
+POST {{baseUrl}}/quotes
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{ "requestId": "{{requestId}}", "price": 500 }
+
+### Duplicate quote from the same provider -> 409
+POST {{baseUrl}}/quotes
+Authorization: Bearer {{providerToken}}
+Content-Type: application/json
+
+{ "requestId": "{{requestId}}", "price": 650 }
+
+### Price of 0 -> 400
+POST {{baseUrl}}/quotes
+Authorization: Bearer {{providerToken}}
+Content-Type: application/json
+
+{ "requestId": "{{requestId}}", "price": 0 }
+
+### Invalid request id -> 400
+POST {{baseUrl}}/quotes
+Authorization: Bearer {{providerToken}}
+Content-Type: application/json
+
+{ "requestId": "123", "price": 500 }
+
+### Request that does not exist -> 404
+POST {{baseUrl}}/quotes
+Authorization: Bearer {{providerToken}}
+Content-Type: application/json
+
+{ "requestId": "000000000000000000000000", "price": 500 }
+
+### Quote on a cancelled request -> 400
+POST {{baseUrl}}/quotes
+Authorization: Bearer {{provider2Token}}
+Content-Type: application/json
+
+{ "requestId": "{{request3Id}}", "price": 500 }
+
+### Other customer lists quotes on this request -> 403
+GET {{baseUrl}}/requests/{{requestId}}/quotes
+Authorization: Bearer {{customer2Token}}
+
+### Other customer accepts a quote on this request -> 403
+PUT {{baseUrl}}/quotes/{{quote1Id}}/accept
+Authorization: Bearer {{customer2Token}}
+
+### Provider accepts a quote -> 403
+PUT {{baseUrl}}/quotes/{{quote1Id}}/accept
+Authorization: Bearer {{providerToken}}
+
+### Customer opens provider quotes list -> 403
+GET {{baseUrl}}/quotes/mine
+Authorization: Bearer {{customerToken}}
+
+### Provider lists quotes on a request -> 403
+GET {{baseUrl}}/requests/{{requestId}}/quotes
+Authorization: Bearer {{providerToken}}
+
+### Accept with an invalid id -> 400
+PUT {{baseUrl}}/quotes/123/accept
+Authorization: Bearer {{customerToken}}
+
+### Accept a quote that does not exist -> 404
+PUT {{baseUrl}}/quotes/000000000000000000000000/accept
+Authorization: Bearer {{customerToken}}

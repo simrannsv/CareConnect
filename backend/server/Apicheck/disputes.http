@@ -1,0 +1,306 @@
+@baseUrl = http://localhost:5000/api
+@adminToken = {{loginAdmin.response.body.$.data.token}}
+@customerToken = {{loginCustomer.response.body.$.data.token}}
+@customer2Token = {{loginCustomer2.response.body.$.data.token}}
+@providerToken = {{loginProvider.response.body.$.data.token}}
+@categoryId = {{listCategories.response.body.$.data[0]._id}}
+@request1Id = {{createRequest1.response.body.$.data._id}}
+@request2Id = {{createRequest2.response.body.$.data._id}}
+@quote1Id = {{createQuote1.response.body.$.data._id}}
+@quote2Id = {{createQuote2.response.body.$.data._id}}
+@booking1Id = {{createBooking1.response.body.$.data._id}}
+@booking2Id = {{createBooking2.response.body.$.data._id}}
+
+# Before running: seed admin, register users (auth.http), create categories,
+# and finish providers.http (provider@test.com verified, in the first category).
+# This file builds its own two jobs. Run it in one sitting (times are relative to "now").
+#   job 1 (slot A): started, so it can be disputed
+#   job 2 (slot B): only scheduled, so it cannot be disputed yet
+
+###############################################
+# LOGINS AND SETUP (run these first, in order)
+###############################################
+
+### Login admin -> 200
+# @name loginAdmin
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "admin@careconnect.com", "password": "admin123" }
+
+### Login customer -> 200
+# @name loginCustomer
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "customer@test.com", "password": "123456" }
+
+### Register second customer -> 201 (409 on re-run is fine)
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{ "name": "Second Customer", "email": "customer2@test.com", "password": "123456", "role": "customer" }
+
+### Login second customer -> 200
+# @name loginCustomer2
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "customer2@test.com", "password": "123456" }
+
+### Login provider -> 200
+# @name loginProvider
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "provider@test.com", "password": "123456" }
+
+### Get category ids (public) -> 200
+# @name listCategories
+GET {{baseUrl}}/categories
+
+### Provider: set availability (slot A and slot B) -> 200
+PUT {{baseUrl}}/providers/me/availability
+Authorization: Bearer {{providerToken}}
+Content-Type: application/json
+
+{
+  "slots": [
+    { "start": "{{$datetime iso8601 1 d}}", "end": "{{$datetime iso8601 2 d}}" },
+    { "start": "{{$datetime iso8601 3 d}}", "end": "{{$datetime iso8601 4 d}}" }
+  ]
+}
+
+
+###############################################
+# JOB 1 (slot A): book and start it
+###############################################
+
+### Customer: create request 1 -> 201
+# @name createRequest1
+POST {{baseUrl}}/requests
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{
+  "description": "Kitchen tap is leaking water all day and the pipe below is wet",
+  "location": "Vanasthalipuram",
+  "category": "{{categoryId}}"
+}
+
+### Provider: quote -> 201
+# @name createQuote1
+POST {{baseUrl}}/quotes
+Authorization: Bearer {{providerToken}}
+Content-Type: application/json
+
+{ "requestId": "{{request1Id}}", "price": 600 }
+
+### Customer: accept -> 200
+PUT {{baseUrl}}/quotes/{{quote1Id}}/accept
+Authorization: Bearer {{customerToken}}
+
+### Customer: book slot A -> 201
+# @name createBooking1
+POST {{baseUrl}}/bookings
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{
+  "quoteId": "{{quote1Id}}",
+  "start": "{{$datetime iso8601 1 d}}",
+  "end": "{{$datetime iso8601 25 h}}"
+}
+
+### Dispute before the job has started -> 400
+POST {{baseUrl}}/bookings/{{booking1Id}}/dispute
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{ "reason": "The provider has not arrived yet and is not answering calls" }
+
+### Provider: start job -> 200
+PUT {{baseUrl}}/bookings/{{booking1Id}}/status
+Authorization: Bearer {{providerToken}}
+Content-Type: application/json
+
+{ "status": "in_progress" }
+
+
+###############################################
+# JOB 2 (slot B): only scheduled
+###############################################
+
+### Customer: create request 2 -> 201
+# @name createRequest2
+POST {{baseUrl}}/requests
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{
+  "description": "Bathroom pipe joint is dripping slowly, needs a look",
+  "location": "Vanasthalipuram",
+  "category": "{{categoryId}}"
+}
+
+### Provider: quote -> 201
+# @name createQuote2
+POST {{baseUrl}}/quotes
+Authorization: Bearer {{providerToken}}
+Content-Type: application/json
+
+{ "requestId": "{{request2Id}}", "price": 450 }
+
+### Customer: accept -> 200
+PUT {{baseUrl}}/quotes/{{quote2Id}}/accept
+Authorization: Bearer {{customerToken}}
+
+### Customer: book slot B -> 201
+# @name createBooking2
+POST {{baseUrl}}/bookings
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{
+  "quoteId": "{{quote2Id}}",
+  "start": "{{$datetime iso8601 3 d}}",
+  "end": "{{$datetime iso8601 73 h}}"
+}
+
+
+###############################################
+# HAPPY PATH
+###############################################
+
+### Customer: open a dispute on job 1 -> 200, disputeStatus = open
+POST {{baseUrl}}/bookings/{{booking1Id}}/dispute
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{ "reason": "The tap is still leaking after the provider left and the floor is wet" }
+
+### Booking shows the dispute -> 200
+GET {{baseUrl}}/bookings/{{booking1Id}}
+Authorization: Bearer {{customerToken}}
+
+### Admin: open disputes -> 200, job 1 is listed
+GET {{baseUrl}}/admin/disputes
+Authorization: Bearer {{adminToken}}
+
+### Admin: resolve the dispute -> 200, disputeStatus = resolved
+PUT {{baseUrl}}/admin/disputes/{{booking1Id}}/resolve
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{ "resolution": "Provider will revisit and fix the leak at no extra charge" }
+
+### Admin: resolved disputes -> 200, job 1 is listed
+GET {{baseUrl}}/admin/disputes?status=resolved
+Authorization: Bearer {{adminToken}}
+
+### Admin: open disputes again -> 200, job 1 is gone
+GET {{baseUrl}}/admin/disputes
+Authorization: Bearer {{adminToken}}
+
+
+###############################################
+# FAILURE CASES
+###############################################
+
+### Dispute the same booking again -> 400
+POST {{baseUrl}}/bookings/{{booking1Id}}/dispute
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{ "reason": "Trying to open a second dispute on the same job" }
+
+### Dispute a job that is only scheduled -> 400
+POST {{baseUrl}}/bookings/{{booking2Id}}/dispute
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{ "reason": "The job has not even started so there is nothing to dispute" }
+
+### Dispute without token -> 401
+POST {{baseUrl}}/bookings/{{booking1Id}}/dispute
+Content-Type: application/json
+
+{ "reason": "No token was sent with this request" }
+
+### Other customer disputes this booking -> 403
+POST {{baseUrl}}/bookings/{{booking1Id}}/dispute
+Authorization: Bearer {{customer2Token}}
+Content-Type: application/json
+
+{ "reason": "This is not my booking but I am trying anyway" }
+
+### Provider disputes -> 403
+POST {{baseUrl}}/bookings/{{booking1Id}}/dispute
+Authorization: Bearer {{providerToken}}
+Content-Type: application/json
+
+{ "reason": "Providers cannot open disputes through this route" }
+
+### Reason too short -> 400
+POST {{baseUrl}}/bookings/{{booking1Id}}/dispute
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{ "reason": "bad" }
+
+### Invalid booking id -> 400
+POST {{baseUrl}}/bookings/123/dispute
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{ "reason": "This booking id is not valid at all" }
+
+### Booking that does not exist -> 404
+POST {{baseUrl}}/bookings/000000000000000000000000/dispute
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{ "reason": "This booking does not exist in the database" }
+
+### Resolve a booking with no open dispute -> 400
+PUT {{baseUrl}}/admin/disputes/{{booking2Id}}/resolve
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{ "resolution": "Nothing to resolve here" }
+
+### Resolve an already resolved dispute -> 400
+PUT {{baseUrl}}/admin/disputes/{{booking1Id}}/resolve
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{ "resolution": "Trying to resolve it a second time" }
+
+### Customer resolves a dispute -> 403
+PUT {{baseUrl}}/admin/disputes/{{booking1Id}}/resolve
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{ "resolution": "Customers cannot resolve disputes" }
+
+### Provider resolves a dispute -> 403
+PUT {{baseUrl}}/admin/disputes/{{booking1Id}}/resolve
+Authorization: Bearer {{providerToken}}
+Content-Type: application/json
+
+{ "resolution": "Providers cannot resolve disputes" }
+
+### Resolution too short -> 400
+PUT {{baseUrl}}/admin/disputes/{{booking1Id}}/resolve
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{ "resolution": "ok" }
+
+### Customer lists disputes (admin only) -> 403
+GET {{baseUrl}}/admin/disputes
+Authorization: Bearer {{customerToken}}
+
+### Invalid status filter -> 400
+GET {{baseUrl}}/admin/disputes?status=banana
+Authorization: Bearer {{adminToken}}

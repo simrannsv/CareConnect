@@ -1,0 +1,170 @@
+@baseUrl = http://localhost:5000/api
+@adminToken = {{loginAdmin.response.body.$.data.token}}
+@customerToken = {{loginCustomer.response.body.$.data.token}}
+@providerToken = {{loginProvider.response.body.$.data.token}}
+@categoryId = {{listCategories.response.body.$.data[0]._id}}
+@providerId = {{myProfile.response.body.$.data._id}}
+
+# Before running: node seed/seedAdmin.js, register the users in auth.http,
+# and create categories in categories.http.
+
+###############################################
+# LOGINS (run these first)
+###############################################
+
+### Login admin -> 200
+# @name loginAdmin
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "admin@careconnect.com", "password": "admin123" }
+
+### Login customer -> 200
+# @name loginCustomer
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "customer@test.com", "password": "123456" }
+
+### Login provider -> 200
+# @name loginProvider
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "provider@test.com", "password": "123456" }
+
+
+###############################################
+# HAPPY PATH (run top to bottom)
+###############################################
+
+### Get category ids (public) -> 200
+# @name listCategories
+GET {{baseUrl}}/categories
+
+### Provider: get own profile -> 200, isVerified = false
+# @name myProfile
+GET {{baseUrl}}/providers/me
+Authorization: Bearer {{providerToken}}
+
+### Provider: update profile -> 200
+PUT {{baseUrl}}/providers/me
+Authorization: Bearer {{providerToken}}
+Content-Type: application/json
+
+{
+  "categories": ["{{categoryId}}"],
+  "skills": ["Pipe Repair", "Leak Fixing", "Tap Installation"],
+  "serviceAreas": ["Vanasthalipuram", "LB Nagar"],
+  "basePrice": 500,
+  "experienceYears": 5,
+  "bio": "Plumber with 5 years of home service experience"
+}
+
+### Provider: set availability -> 200 (two non-overlapping future slots)
+PUT {{baseUrl}}/providers/me/availability
+Authorization: Bearer {{providerToken}}
+Content-Type: application/json
+
+{
+  "slots": [
+    { "start": "{{$datetime iso8601 1 d}}", "end": "{{$datetime iso8601 2 d}}" },
+    { "start": "{{$datetime iso8601 3 d}}", "end": "{{$datetime iso8601 4 d}}" }
+  ]
+}
+
+### Public list -> 200, provider NOT here yet (not verified)
+GET {{baseUrl}}/providers
+
+### Admin: pending providers -> 200, provider is listed
+GET {{baseUrl}}/providers/pending
+Authorization: Bearer {{adminToken}}
+
+### Admin: verify provider -> 200, isVerified = true
+PUT {{baseUrl}}/providers/{{providerId}}/verify
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{ "isVerified": true }
+
+### Public list -> 200, provider now appears
+GET {{baseUrl}}/providers
+
+### Public list with filters -> 200
+GET {{baseUrl}}/providers?category={{categoryId}}&area=vanasthalipuram&skill=leak fixing
+
+### Public: get one provider -> 200
+GET {{baseUrl}}/providers/{{providerId}}
+
+
+###############################################
+# FAILURE CASES
+###############################################
+
+### Profile without token -> 401
+GET {{baseUrl}}/providers/me
+
+### Customer opens provider profile -> 403
+GET {{baseUrl}}/providers/me
+Authorization: Bearer {{customerToken}}
+
+### Customer sets availability -> 403
+PUT {{baseUrl}}/providers/me/availability
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{ "slots": [] }
+
+### Provider verifies themselves -> 403
+PUT {{baseUrl}}/providers/{{providerId}}/verify
+Authorization: Bearer {{providerToken}}
+Content-Type: application/json
+
+{ "isVerified": true }
+
+### Provider opens admin pending list -> 403
+GET {{baseUrl}}/providers/pending
+Authorization: Bearer {{providerToken}}
+
+### Negative price -> 400
+PUT {{baseUrl}}/providers/me
+Authorization: Bearer {{providerToken}}
+Content-Type: application/json
+
+{ "basePrice": -10 }
+
+### Category that does not exist -> 400
+PUT {{baseUrl}}/providers/me
+Authorization: Bearer {{providerToken}}
+Content-Type: application/json
+
+{ "categories": ["000000000000000000000000"] }
+
+### Slot ends before it starts -> 400
+PUT {{baseUrl}}/providers/me/availability
+Authorization: Bearer {{providerToken}}
+Content-Type: application/json
+
+{
+  "slots": [
+    { "start": "{{$datetime iso8601 2 d}}", "end": "{{$datetime iso8601 1 d}}" }
+  ]
+}
+
+### Overlapping slots -> 400
+PUT {{baseUrl}}/providers/me/availability
+Authorization: Bearer {{providerToken}}
+Content-Type: application/json
+
+{
+  "slots": [
+    { "start": "{{$datetime iso8601 1 d}}", "end": "{{$datetime iso8601 3 d}}" },
+    { "start": "{{$datetime iso8601 2 d}}", "end": "{{$datetime iso8601 4 d}}" }
+  ]
+}
+
+### Invalid provider id -> 400
+GET {{baseUrl}}/providers/123
+
+### Valid id that does not exist -> 404
+GET {{baseUrl}}/providers/000000000000000000000000

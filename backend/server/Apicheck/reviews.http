@@ -1,0 +1,252 @@
+@baseUrl = http://localhost:5000/api
+@customerToken = {{loginCustomer.response.body.$.data.token}}
+@customer2Token = {{loginCustomer2.response.body.$.data.token}}
+@providerToken = {{loginProvider.response.body.$.data.token}}
+@categoryId = {{listCategories.response.body.$.data[0]._id}}
+@providerId = {{myProfile.response.body.$.data._id}}
+@requestId = {{createRequest.response.body.$.data._id}}
+@quoteId = {{createQuote.response.body.$.data._id}}
+@bookingId = {{createBooking.response.body.$.data._id}}
+
+# Before running: seed admin, register users (auth.http), create categories,
+# and finish providers.http (provider@test.com verified, in the first category).
+# This file creates its own completed job, so it needs no other file's data.
+# Run it in one sitting, because the times are relative to "now".
+
+###############################################
+# LOGINS AND SETUP (run these first, in order)
+###############################################
+
+### Login customer -> 200
+# @name loginCustomer
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "customer@test.com", "password": "123456" }
+
+### Register second customer -> 201 (409 on re-run is fine)
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{ "name": "Second Customer", "email": "customer2@test.com", "password": "123456", "role": "customer" }
+
+### Login second customer -> 200
+# @name loginCustomer2
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "customer2@test.com", "password": "123456" }
+
+### Login provider -> 200
+# @name loginProvider
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "provider@test.com", "password": "123456" }
+
+### Get category ids (public) -> 200
+# @name listCategories
+GET {{baseUrl}}/categories
+
+### Provider: own profile (gives the profile id and current rating) -> 200
+# @name myProfile
+GET {{baseUrl}}/providers/me
+Authorization: Bearer {{providerToken}}
+
+### Provider: set availability -> 200
+PUT {{baseUrl}}/providers/me/availability
+Authorization: Bearer {{providerToken}}
+Content-Type: application/json
+
+{
+  "slots": [
+    { "start": "{{$datetime iso8601 1 d}}", "end": "{{$datetime iso8601 2 d}}" }
+  ]
+}
+
+
+###############################################
+# CREATE A JOB AND BOOK IT
+###############################################
+
+### Customer: create request -> 201
+# @name createRequest
+POST {{baseUrl}}/requests
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{
+  "description": "Kitchen tap is leaking water all day and the pipe below is wet",
+  "location": "Vanasthalipuram",
+  "category": "{{categoryId}}"
+}
+
+### Provider: quote -> 201
+# @name createQuote
+POST {{baseUrl}}/quotes
+Authorization: Bearer {{providerToken}}
+Content-Type: application/json
+
+{ "requestId": "{{requestId}}", "price": 600 }
+
+### Customer: accept the quote -> 200
+PUT {{baseUrl}}/quotes/{{quoteId}}/accept
+Authorization: Bearer {{customerToken}}
+
+### Customer: book -> 201
+# @name createBooking
+POST {{baseUrl}}/bookings
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{
+  "quoteId": "{{quoteId}}",
+  "start": "{{$datetime iso8601 1 d}}",
+  "end": "{{$datetime iso8601 25 h}}"
+}
+
+### Review before the job is completed -> 400
+POST {{baseUrl}}/reviews
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{ "bookingId": "{{bookingId}}", "rating": 5, "comment": "Too early" }
+
+### Provider: start job -> 200
+PUT {{baseUrl}}/bookings/{{bookingId}}/status
+Authorization: Bearer {{providerToken}}
+Content-Type: application/json
+
+{ "status": "in_progress" }
+
+### Provider: complete job -> 200
+PUT {{baseUrl}}/bookings/{{bookingId}}/status
+Authorization: Bearer {{providerToken}}
+Content-Type: application/json
+
+{ "status": "completed" }
+
+### Booking shows reviewed = false -> 200
+GET {{baseUrl}}/bookings/{{bookingId}}
+Authorization: Bearer {{customerToken}}
+
+
+###############################################
+# HAPPY PATH
+###############################################
+
+### Customer: leave a review -> 201
+POST {{baseUrl}}/reviews
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{ "bookingId": "{{bookingId}}", "rating": 5, "comment": "Fixed quickly and cleaned up after" }
+
+### Provider profile now has an updated rating -> 200, ratingCount went up
+GET {{baseUrl}}/providers/me
+Authorization: Bearer {{providerToken}}
+
+### Booking shows reviewed = true -> 200
+GET {{baseUrl}}/bookings/{{bookingId}}
+Authorization: Bearer {{customerToken}}
+
+### Customer: bookings list also shows the flag -> 200
+GET {{baseUrl}}/bookings/mine?status=completed
+Authorization: Bearer {{customerToken}}
+
+### Public: provider rating summary and reviews -> 200
+GET {{baseUrl}}/reviews/provider/{{providerId}}
+
+### Public: only the latest 1 review -> 200
+GET {{baseUrl}}/reviews/provider/{{providerId}}?limit=1
+
+### Customer: reviews I wrote -> 200
+GET {{baseUrl}}/reviews/mine
+Authorization: Bearer {{customerToken}}
+
+### Provider: reviews I received -> 200
+GET {{baseUrl}}/reviews/mine
+Authorization: Bearer {{providerToken}}
+
+
+###############################################
+# FAILURE CASES
+###############################################
+
+### Review the same booking again -> 409
+POST {{baseUrl}}/reviews
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{ "bookingId": "{{bookingId}}", "rating": 4 }
+
+### Other customer reviews this booking -> 403
+POST {{baseUrl}}/reviews
+Authorization: Bearer {{customer2Token}}
+Content-Type: application/json
+
+{ "bookingId": "{{bookingId}}", "rating": 1, "comment": "Not my job" }
+
+### Review without token -> 401
+POST {{baseUrl}}/reviews
+Content-Type: application/json
+
+{ "bookingId": "{{bookingId}}", "rating": 5 }
+
+### Provider reviews -> 403
+POST {{baseUrl}}/reviews
+Authorization: Bearer {{providerToken}}
+Content-Type: application/json
+
+{ "bookingId": "{{bookingId}}", "rating": 5 }
+
+### Rating 0 -> 400
+POST {{baseUrl}}/reviews
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{ "bookingId": "{{bookingId}}", "rating": 0 }
+
+### Rating 6 -> 400
+POST {{baseUrl}}/reviews
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{ "bookingId": "{{bookingId}}", "rating": 6 }
+
+### Rating 4.5 -> 400 (whole numbers only)
+POST {{baseUrl}}/reviews
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{ "bookingId": "{{bookingId}}", "rating": 4.5 }
+
+### Missing rating -> 400
+POST {{baseUrl}}/reviews
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{ "bookingId": "{{bookingId}}" }
+
+### Invalid booking id -> 400
+POST {{baseUrl}}/reviews
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{ "bookingId": "123", "rating": 5 }
+
+### Booking that does not exist -> 404
+POST {{baseUrl}}/reviews
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{ "bookingId": "000000000000000000000000", "rating": 5 }
+
+### Reviews mine without token -> 401
+GET {{baseUrl}}/reviews/mine
+
+### Provider reviews with an invalid id -> 400
+GET {{baseUrl}}/reviews/provider/123
+
+### Provider reviews that do not exist -> 404
+GET {{baseUrl}}/reviews/provider/000000000000000000000000

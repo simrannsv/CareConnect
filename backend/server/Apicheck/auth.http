@@ -1,0 +1,120 @@
+@baseUrl = http://localhost:5000/api
+@customerToken = {{loginCustomer.response.body.$.data.token}}
+@providerToken = {{loginProvider.response.body.$.data.token}}
+
+###############################################
+# HAPPY PATH (run top to bottom)
+###############################################
+
+### Register customer -> 201 (409 if you run it twice, that is expected)
+# @name registerCustomer
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "name": "Test Customer",
+  "email": "customer@test.com",
+  "password": "123456",
+  "role": "customer"
+}
+
+### Register provider -> 201 (also creates an empty Provider profile)
+# @name registerProvider
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "name": "Test Provider",
+  "email": "provider@test.com",
+  "password": "123456",
+  "role": "provider"
+}
+
+### Login customer -> 200 + token
+# @name loginCustomer
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "customer@test.com",
+  "password": "123456"
+}
+
+### Login provider -> 200 + token
+# @name loginProvider
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "provider@test.com",
+  "password": "123456"
+}
+
+### Get current user (customer) -> 200, role = customer
+GET {{baseUrl}}/auth/me
+Authorization: Bearer {{customerToken}}
+
+### Get current user (provider) -> 200, role = provider
+GET {{baseUrl}}/auth/me
+Authorization: Bearer {{providerToken}}
+
+
+###############################################
+# FAILURE CASES
+###############################################
+
+### Duplicate email -> 409
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "name": "Test Customer",
+  "email": "customer@test.com",
+  "password": "123456"
+}
+
+### Invalid body -> 400
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "name": "A",
+  "email": "not-an-email",
+  "password": "123"
+}
+
+### Register as admin -> 400 (admin is not allowed at signup)
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "name": "Sneaky Admin",
+  "email": "admin@test.com",
+  "password": "123456",
+  "role": "admin"
+}
+
+### Wrong password -> 401
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "customer@test.com",
+  "password": "wrongpass"
+}
+
+### Unknown email -> 401
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "nobody@test.com",
+  "password": "123456"
+}
+
+### /me without token -> 401
+GET {{baseUrl}}/auth/me
+
+### /me with a fake token -> 401
+GET {{baseUrl}}/auth/me
+Authorization: Bearer abc.def.ghi

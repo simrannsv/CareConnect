@@ -1,0 +1,53 @@
+.admin-providers {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+
+.admin-providers h1 {
+    font-size: 2rem;
+    color: #333;
+    margin-bottom: 2rem;
+}
+
+.ap-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+    gap: 1.5rem;
+}
+
+.ap-card {
+    background: white;
+    border: 1px solid #e0d4f7;
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 2px 8px rgba(147, 112, 219, 0.1);
+}
+
+.ap-card h3 {
+    margin: 0 0 1rem 0;
+    color: #333;
+}
+
+.ap-card p {
+    margin: 0.5rem 0;
+    font-size: 0.9rem;
+    color: #666;
+}
+
+.ap-bio {
+    margin-top: 1rem;
+    font-size: 0.85rem;
+    color: #999;
+    font-style: italic;
+}
+
+.ap-actions {
+    display: flex;
+    gap: 1rem;
+    margin-top: 1.5rem;
+}
+
+.ap-actions button {
+    flex: 1;
+}

@@ -1,0 +1,85 @@
+@baseUrl = http://localhost:5000/api
+@adminToken = {{loginAdmin.response.body.$.data.token}}
+@customerToken = {{loginCustomer.response.body.$.data.token}}
+@providerToken = {{loginProvider.response.body.$.data.token}}
+
+# Before running: seed admin and register the test users (auth.http).
+# Disputes are tested in disputes.http.
+
+###############################################
+# LOGINS (run these first)
+###############################################
+
+### Login admin -> 200
+# @name loginAdmin
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "admin@careconnect.com", "password": "admin123" }
+
+### Login customer -> 200
+# @name loginCustomer
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "customer@test.com", "password": "123456" }
+
+### Login provider -> 200
+# @name loginProvider
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "provider@test.com", "password": "123456" }
+
+
+###############################################
+# HAPPY PATH
+###############################################
+
+### Stats -> 200 (users, providers, requests, quotes, bookings, disputes, reviews, topCategories)
+GET {{baseUrl}}/admin/stats
+Authorization: Bearer {{adminToken}}
+
+### All users -> 200 (no passwords in the response)
+GET {{baseUrl}}/admin/users
+Authorization: Bearer {{adminToken}}
+
+### Only providers -> 200
+GET {{baseUrl}}/admin/users?role=provider
+Authorization: Bearer {{adminToken}}
+
+### Search by name or email -> 200
+GET {{baseUrl}}/admin/users?q=test
+Authorization: Bearer {{adminToken}}
+
+### Pagination -> 200, at most 2 users, pages counted
+GET {{baseUrl}}/admin/users?page=1&limit=2
+Authorization: Bearer {{adminToken}}
+
+### Search with regex characters is treated as plain text -> 200, no error
+GET {{baseUrl}}/admin/users?q=.*(
+Authorization: Bearer {{adminToken}}
+
+
+###############################################
+# FAILURE CASES
+###############################################
+
+### Stats without token -> 401
+GET {{baseUrl}}/admin/stats
+
+### Stats as customer -> 403
+GET {{baseUrl}}/admin/stats
+Authorization: Bearer {{customerToken}}
+
+### Stats as provider -> 403
+GET {{baseUrl}}/admin/stats
+Authorization: Bearer {{providerToken}}
+
+### Users as customer -> 403
+GET {{baseUrl}}/admin/users
+Authorization: Bearer {{customerToken}}
+
+### Invalid role filter -> 400
+GET {{baseUrl}}/admin/users?role=superuser
+Authorization: Bearer {{adminToken}}

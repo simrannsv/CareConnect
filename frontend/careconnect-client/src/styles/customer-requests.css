@@ -1,0 +1,140 @@
+.customer-requests {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.cc-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+}
+
+.cc-header h1 {
+  font-size: 2rem;
+  color: #333;
+  margin: 0;
+}
+
+.cc-requests-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  gap: 1.5rem;
+}
+
+.cc-request-card {
+  background: white;
+  border: 1px solid #e0d4f7;
+  border-radius: 12px;
+  padding: 1.5rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(147, 112, 219, 0.1);
+}
+
+.cc-request-card:hover {
+  box-shadow: 0 4px 16px rgba(147, 112, 219, 0.2);
+  transform: translateY(-2px);
+}
+
+.cc-request-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  margin-bottom: 1rem;
+}
+
+.cc-request-header h3 {
+  margin: 0;
+  color: #333;
+  font-size: 1.1rem;
+  flex: 1;
+}
+
+.cc-status {
+  padding: 0.4rem 0.8rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  white-space: nowrap;
+  margin-left: 1rem;
+}
+
+.cc-status-open { background: #e3f2fd; color: #1976d2; }
+.cc-status-quoted { background: #fff3e0; color: #f57c00; }
+.cc-status-booked { background: #e8f5e9; color: #388e3c; }
+.cc-status-closed { background: #f3e5f5; color: #7b1fa2; }
+
+.cc-request-meta p {
+  margin: 0.5rem 0;
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.cc-request-meta strong {
+  color: #333;
+}
+
+.cc-date {
+  font-size: 0.8rem;
+  color: #999;
+  margin-top: 1rem;
+}
+
+.cc-empty {
+  text-align: center;
+  padding: 3rem;
+  background: #f9f7fc;
+  border-radius: 12px;
+}
+
+.cc-empty p {
+  font-size: 1.1rem;
+  color: #666;
+  margin-bottom: 2rem;
+}
+
+.cc-error {
+  background: #ffebee;
+  border: 1px solid #ef5350;
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+  color: #c62828;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.cc-loader {
+  text-align: center;
+  padding: 3rem;
+  font-size: 1.1rem;
+  color: #999;
+}
+
+.cc-btn {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-weight: 600;
+}
+
+.cc-btn-primary {
+  background: #9370db;
+  color: white;
+}
+
+.cc-btn-primary:hover {
+  background: #7d5cbf;
+}
+
+.cc-btn-small {
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+}

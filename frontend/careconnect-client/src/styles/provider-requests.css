@@ -1,0 +1,48 @@
+.provider-requests {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+
+.provider-requests h1 {
+    font-size: 2rem;
+    color: #333;
+    margin-bottom: 2rem;
+}
+
+.pr-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 1.5rem;
+}
+
+.pr-card {
+    background: white;
+    border: 1px solid #e0d4f7;
+    border-radius: 12px;
+    padding: 1.5rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.pr-card:hover {
+    box-shadow: 0 4px 16px rgba(147, 112, 219, 0.2);
+    transform: translateY(-2px);
+}
+
+.pr-card h3 {
+    margin: 0 0 0.5rem 0;
+    color: #333;
+}
+
+.pr-category {
+    color: #9370db;
+    font-weight: 600;
+    margin: 0.5rem 0 1rem 0;
+}
+
+.pr-card p {
+    margin: 0.4rem 0;
+    font-size: 0.9rem;
+    color: #666;
+}

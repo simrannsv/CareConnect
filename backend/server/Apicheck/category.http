@@ -1,0 +1,164 @@
+@baseUrl = http://localhost:5000/api
+@adminToken = {{loginAdmin.response.body.$.data.token}}
+@customerToken = {{loginCustomer.response.body.$.data.token}}
+@providerToken = {{loginProvider.response.body.$.data.token}}
+@categoryId = {{createCategory.response.body.$.data._id}}
+@tempCategoryId = {{createTempCategory.response.body.$.data._id}}
+
+# Before running: node seed/seedAdmin.js, and run the register requests in auth.http once.
+
+###############################################
+# LOGINS (run these first)
+###############################################
+
+### Login admin -> 200
+# @name loginAdmin
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@careconnect.com",
+  "password": "admin123"
+}
+
+### Login customer -> 200
+# @name loginCustomer
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "customer@test.com",
+  "password": "123456"
+}
+
+### Login provider -> 200
+# @name loginProvider
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "provider@test.com",
+  "password": "123456"
+}
+
+
+###############################################
+# HAPPY PATH
+###############################################
+
+### Create category (admin) -> 201 (409 if it already exists)
+# @name createCategory
+POST {{baseUrl}}/categories
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "name": "Plumbing",
+  "description": "Leaks, pipes and fittings"
+}
+
+### Create another category (admin) -> 201
+POST {{baseUrl}}/categories
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "name": "Electrical",
+  "description": "Wiring, switches and appliances"
+}
+
+### List categories (public, no token) -> 200
+GET {{baseUrl}}/categories
+
+### Get one category -> 200
+GET {{baseUrl}}/categories/{{categoryId}}
+
+### Update category (admin) -> 200
+PUT {{baseUrl}}/categories/{{categoryId}}
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "description": "Leaks, pipes, taps and drainage"
+}
+
+### Create a temp category to delete -> 201
+# @name createTempCategory
+POST {{baseUrl}}/categories
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "name": "Temp Category"
+}
+
+### Delete (deactivate) temp category (admin) -> 200, isActive = false
+DELETE {{baseUrl}}/categories/{{tempCategoryId}}
+Authorization: Bearer {{adminToken}}
+
+### List again -> Temp Category should be gone
+GET {{baseUrl}}/categories
+
+
+###############################################
+# FAILURE CASES
+###############################################
+
+### Create with no token -> 401
+POST {{baseUrl}}/categories
+Content-Type: application/json
+
+{
+  "name": "Painting"
+}
+
+### Create as customer -> 403
+POST {{baseUrl}}/categories
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{
+  "name": "Painting"
+}
+
+### Create as provider -> 403
+POST {{baseUrl}}/categories
+Authorization: Bearer {{providerToken}}
+Content-Type: application/json
+
+{
+  "name": "Painting"
+}
+
+### Duplicate name -> 409
+POST {{baseUrl}}/categories
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "name": "Electrical"
+}
+
+### Name too short -> 400
+POST {{baseUrl}}/categories
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "name": "A"
+}
+
+### Invalid id format -> 400
+GET {{baseUrl}}/categories/123
+
+### Valid id that does not exist -> 404
+GET {{baseUrl}}/categories/000000000000000000000000
+
+### Update as customer -> 403
+PUT {{baseUrl}}/categories/{{categoryId}}
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{
+  "name": "Hacked"
+}

@@ -1,0 +1,228 @@
+@baseUrl = http://localhost:5000/api
+@adminToken = {{loginAdmin.response.body.$.data.token}}
+@customerToken = {{loginCustomer.response.body.$.data.token}}
+@customer2Token = {{loginCustomer2.response.body.$.data.token}}
+@providerToken = {{loginProvider.response.body.$.data.token}}
+@categoryId = {{listCategories.response.body.$.data[0]._id}}
+@requestId = {{createRequest.response.body.$.data._id}}
+
+# Before running: seed admin, register users (auth.http), create categories,
+# and finish providers.http so the provider is verified and has that category.
+
+###############################################
+# LOGINS (run these first)
+###############################################
+
+### Login admin -> 200
+# @name loginAdmin
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "admin@careconnect.com", "password": "admin123" }
+
+### Login customer -> 200
+# @name loginCustomer
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "customer@test.com", "password": "123456" }
+
+### Register second customer -> 201 (409 on re-run is fine)
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{ "name": "Second Customer", "email": "customer2@test.com", "password": "123456", "role": "customer" }
+
+### Login second customer -> 200
+# @name loginCustomer2
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "customer2@test.com", "password": "123456" }
+
+### Login provider -> 200
+# @name loginProvider
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "provider@test.com", "password": "123456" }
+
+
+###############################################
+# HAPPY PATH (run top to bottom)
+###############################################
+
+### Get category ids (public) -> 200
+# @name listCategories
+GET {{baseUrl}}/categories
+
+### Customer: create request with a category -> 201
+# @name createRequest
+POST {{baseUrl}}/requests
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{
+  "description": "Kitchen tap is leaking water all day and the pipe below is wet",
+  "location": "Vanasthalipuram",
+  "preferredTime": "{{$datetime iso8601 1 d}}",
+  "category": "{{categoryId}}"
+}
+
+### Customer: create request without a category -> 201, AI fills aiCategory, aiSkills and urgency
+POST {{baseUrl}}/requests
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{
+  "description": "Bathroom light keeps flickering and switch feels hot",
+  "location": "LB Nagar"
+}
+
+### Customer: urgent request -> 201, urgency should be high
+POST {{baseUrl}}/requests
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{
+  "description": "Water pipe burst under the sink and the kitchen floor is flooding, need help right now",
+  "location": "Vanasthalipuram"
+}
+
+### Customer: my requests -> 200
+GET {{baseUrl}}/requests/mine
+Authorization: Bearer {{customerToken}}
+
+### Customer: my open requests only -> 200
+GET {{baseUrl}}/requests/mine?status=open
+Authorization: Bearer {{customerToken}}
+
+### Customer: get one -> 200
+GET {{baseUrl}}/requests/{{requestId}}
+Authorization: Bearer {{customerToken}}
+
+### Provider: request feed -> 200 (only if verified and in that category)
+GET {{baseUrl}}/requests
+Authorization: Bearer {{providerToken}}
+
+### Provider: get one -> 200
+GET {{baseUrl}}/requests/{{requestId}}
+Authorization: Bearer {{providerToken}}
+
+### Admin: all requests -> 200
+GET {{baseUrl}}/requests
+Authorization: Bearer {{adminToken}}
+
+### Admin: get one -> 200
+GET {{baseUrl}}/requests/{{requestId}}
+Authorization: Bearer {{adminToken}}
+
+### Customer: ranked providers for this request -> 200, sorted by score, each with reasons and concerns
+GET {{baseUrl}}/requests/{{requestId}}/matches
+Authorization: Bearer {{customerToken}}
+
+### Customer: ranked providers, top 3 only -> 200
+GET {{baseUrl}}/requests/{{requestId}}/matches?limit=3
+Authorization: Bearer {{customerToken}}
+
+### Admin: ranked providers for this request -> 200
+GET {{baseUrl}}/requests/{{requestId}}/matches
+Authorization: Bearer {{adminToken}}
+
+### Customer: cancel request -> 200, status = closed
+PUT {{baseUrl}}/requests/{{requestId}}/cancel
+Authorization: Bearer {{customerToken}}
+
+### Cancel again -> 400
+PUT {{baseUrl}}/requests/{{requestId}}/cancel
+Authorization: Bearer {{customerToken}}
+
+
+###############################################
+# FAILURE CASES
+###############################################
+
+### Create without token -> 401
+POST {{baseUrl}}/requests
+Content-Type: application/json
+
+{ "description": "Something is broken at home", "location": "Hyderabad" }
+
+### Provider creates a request -> 403
+POST {{baseUrl}}/requests
+Authorization: Bearer {{providerToken}}
+Content-Type: application/json
+
+{ "description": "Something is broken at home", "location": "Hyderabad" }
+
+### Description too short -> 400
+POST {{baseUrl}}/requests
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{ "description": "tap", "location": "Hyderabad" }
+
+### Preferred time in the past -> 400
+POST {{baseUrl}}/requests
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{
+  "description": "Kitchen tap is leaking water all day",
+  "location": "Hyderabad",
+  "preferredTime": "2020-01-01T10:00:00.000Z"
+}
+
+### Category that does not exist -> 400
+POST {{baseUrl}}/requests
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{
+  "description": "Kitchen tap is leaking water all day",
+  "location": "Hyderabad",
+  "category": "000000000000000000000000"
+}
+
+### Other customer views this request -> 403
+GET {{baseUrl}}/requests/{{requestId}}
+Authorization: Bearer {{customer2Token}}
+
+### Other customer cancels this request -> 404
+PUT {{baseUrl}}/requests/{{requestId}}/cancel
+Authorization: Bearer {{customer2Token}}
+
+### Provider asks for matches -> 403
+GET {{baseUrl}}/requests/{{requestId}}/matches
+Authorization: Bearer {{providerToken}}
+
+### Other customer asks for matches -> 403
+GET {{baseUrl}}/requests/{{requestId}}/matches
+Authorization: Bearer {{customer2Token}}
+
+### Matches for a cancelled request -> 400
+GET {{baseUrl}}/requests/{{requestId}}/matches
+Authorization: Bearer {{customerToken}}
+
+### Matches with an invalid id -> 400
+GET {{baseUrl}}/requests/123/matches
+Authorization: Bearer {{customerToken}}
+
+### Matches without token -> 401
+GET {{baseUrl}}/requests/{{requestId}}/matches
+
+### Customer opens the provider feed -> 403
+GET {{baseUrl}}/requests
+Authorization: Bearer {{customerToken}}
+
+### Provider opens /mine -> 403
+GET {{baseUrl}}/requests/mine
+Authorization: Bearer {{providerToken}}
+
+### Invalid id -> 400
+GET {{baseUrl}}/requests/123
+Authorization: Bearer {{customerToken}}
+
+### Valid id that does not exist -> 404
+GET {{baseUrl}}/requests/000000000000000000000000
+Authorization: Bearer {{customerToken}}

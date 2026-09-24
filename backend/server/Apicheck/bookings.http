@@ -1,0 +1,411 @@
+@baseUrl = http://localhost:5000/api
+@adminToken = {{loginAdmin.response.body.$.data.token}}
+@customerToken = {{loginCustomer.response.body.$.data.token}}
+@customer2Token = {{loginCustomer2.response.body.$.data.token}}
+@providerToken = {{loginProvider.response.body.$.data.token}}
+@categoryId = {{listCategories.response.body.$.data[0]._id}}
+@request1Id = {{createRequest1.response.body.$.data._id}}
+@request2Id = {{createRequest2.response.body.$.data._id}}
+@request3Id = {{createRequest3.response.body.$.data._id}}
+@quote1Id = {{createQuote1.response.body.$.data._id}}
+@quote2Id = {{createQuote2.response.body.$.data._id}}
+@quote3Id = {{createQuote3.response.body.$.data._id}}
+@booking1Id = {{createBooking1.response.body.$.data._id}}
+@booking2Id = {{createBooking2.response.body.$.data._id}}
+
+# Before running: seed admin, register users (auth.http), create categories,
+# and finish providers.http (provider@test.com verified, in the first category).
+# This file sets the provider's availability itself:
+#   slot A = tomorrow to the day after, slot B = 3 days to 4 days from now.
+# Run the whole file in one sitting, because the times are relative to "now".
+
+###############################################
+# LOGINS AND SETUP (run these first, in order)
+###############################################
+
+### Login admin -> 200
+# @name loginAdmin
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "admin@careconnect.com", "password": "admin123" }
+
+### Login customer -> 200
+# @name loginCustomer
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "customer@test.com", "password": "123456" }
+
+### Register second customer -> 201 (409 on re-run is fine)
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{ "name": "Second Customer", "email": "customer2@test.com", "password": "123456", "role": "customer" }
+
+### Login second customer -> 200
+# @name loginCustomer2
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "customer2@test.com", "password": "123456" }
+
+### Login provider -> 200
+# @name loginProvider
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "provider@test.com", "password": "123456" }
+
+### Get category ids (public) -> 200
+# @name listCategories
+GET {{baseUrl}}/categories
+
+### Provider: set availability (slot A and slot B) -> 200
+PUT {{baseUrl}}/providers/me/availability
+Authorization: Bearer {{providerToken}}
+Content-Type: application/json
+
+{
+  "slots": [
+    { "start": "{{$datetime iso8601 1 d}}", "end": "{{$datetime iso8601 2 d}}" },
+    { "start": "{{$datetime iso8601 3 d}}", "end": "{{$datetime iso8601 4 d}}" }
+  ]
+}
+
+
+###############################################
+# JOB 1: book, run, complete, confirm
+###############################################
+
+### Customer: create request 1 -> 201
+# @name createRequest1
+POST {{baseUrl}}/requests
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{
+  "description": "Kitchen tap is leaking water all day and the pipe below is wet",
+  "location": "Vanasthalipuram",
+  "category": "{{categoryId}}"
+}
+
+### Provider: quote request 1 -> 201
+# @name createQuote1
+POST {{baseUrl}}/quotes
+Authorization: Bearer {{providerToken}}
+Content-Type: application/json
+
+{ "requestId": "{{request1Id}}", "price": 600 }
+
+### Customer: accept the quote -> 200
+PUT {{baseUrl}}/quotes/{{quote1Id}}/accept
+Authorization: Bearer {{customerToken}}
+
+### Customer: book slot A for one hour -> 201, status = scheduled
+# @name createBooking1
+POST {{baseUrl}}/bookings
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{
+  "quoteId": "{{quote1Id}}",
+  "start": "{{$datetime iso8601 1 d}}",
+  "end": "{{$datetime iso8601 25 h}}",
+  "notes": "Please call before arriving"
+}
+
+### Request 1 is now booked -> 200, status = booked
+GET {{baseUrl}}/requests/{{request1Id}}
+Authorization: Bearer {{customerToken}}
+
+### Customer: my bookings -> 200
+GET {{baseUrl}}/bookings/mine
+Authorization: Bearer {{customerToken}}
+
+### Provider: my bookings -> 200
+GET {{baseUrl}}/bookings/mine?status=scheduled
+Authorization: Bearer {{providerToken}}
+
+### Customer: get one booking -> 200
+GET {{baseUrl}}/bookings/{{booking1Id}}
+Authorization: Bearer {{customerToken}}
+
+### Provider: get one booking -> 200
+GET {{baseUrl}}/bookings/{{booking1Id}}
+Authorization: Bearer {{providerToken}}
+
+### Admin: get one booking -> 200
+GET {{baseUrl}}/bookings/{{booking1Id}}
+Authorization: Bearer {{adminToken}}
+
+### Admin: all bookings -> 200
+GET {{baseUrl}}/bookings
+Authorization: Bearer {{adminToken}}
+
+
+###############################################
+# JOB 2: conflict, outside slot, then cancel
+###############################################
+
+### Customer: create request 2 -> 201
+# @name createRequest2
+POST {{baseUrl}}/requests
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{
+  "description": "Bathroom pipe joint is dripping slowly, needs a look",
+  "location": "Vanasthalipuram",
+  "category": "{{categoryId}}"
+}
+
+### Provider: quote request 2 -> 201
+# @name createQuote2
+POST {{baseUrl}}/quotes
+Authorization: Bearer {{providerToken}}
+Content-Type: application/json
+
+{ "requestId": "{{request2Id}}", "price": 450 }
+
+### Customer: accept the quote -> 200
+PUT {{baseUrl}}/quotes/{{quote2Id}}/accept
+Authorization: Bearer {{customerToken}}
+
+### Book the SAME time as job 1 -> 409 (overlap with an active booking)
+POST {{baseUrl}}/bookings
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{
+  "quoteId": "{{quote2Id}}",
+  "start": "{{$datetime iso8601 1 d}}",
+  "end": "{{$datetime iso8601 25 h}}"
+}
+
+### Book a time with no open slot (10 days away) -> 400
+POST {{baseUrl}}/bookings
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{
+  "quoteId": "{{quote2Id}}",
+  "start": "{{$datetime iso8601 10 d}}",
+  "end": "{{$datetime iso8601 241 h}}"
+}
+
+### Book slot B instead -> 201
+# @name createBooking2
+POST {{baseUrl}}/bookings
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{
+  "quoteId": "{{quote2Id}}",
+  "start": "{{$datetime iso8601 3 d}}",
+  "end": "{{$datetime iso8601 73 h}}"
+}
+
+
+###############################################
+# STATUS FLOW ON JOB 1
+###############################################
+
+### Customer tries to start the job -> 400
+PUT {{baseUrl}}/bookings/{{booking1Id}}/status
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{ "status": "in_progress" }
+
+### Provider skips straight to completed -> 400
+PUT {{baseUrl}}/bookings/{{booking1Id}}/status
+Authorization: Bearer {{providerToken}}
+Content-Type: application/json
+
+{ "status": "completed" }
+
+### Customer confirms before completion -> 400
+PUT {{baseUrl}}/bookings/{{booking1Id}}/confirm
+Authorization: Bearer {{customerToken}}
+
+### Provider: start job -> 200, status = in_progress
+PUT {{baseUrl}}/bookings/{{booking1Id}}/status
+Authorization: Bearer {{providerToken}}
+Content-Type: application/json
+
+{ "status": "in_progress" }
+
+### Cancel a job that already started -> 400
+PUT {{baseUrl}}/bookings/{{booking1Id}}/status
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{ "status": "cancelled" }
+
+### Provider: complete job -> 200, status = completed
+PUT {{baseUrl}}/bookings/{{booking1Id}}/status
+Authorization: Bearer {{providerToken}}
+Content-Type: application/json
+
+{ "status": "completed" }
+
+### Request 1 is now closed -> 200, status = closed
+GET {{baseUrl}}/requests/{{request1Id}}
+Authorization: Bearer {{customerToken}}
+
+### Other customer confirms -> 403
+PUT {{baseUrl}}/bookings/{{booking1Id}}/confirm
+Authorization: Bearer {{customer2Token}}
+
+### Customer: confirm job done -> 200, customerConfirmed = true
+PUT {{baseUrl}}/bookings/{{booking1Id}}/confirm
+Authorization: Bearer {{customerToken}}
+
+### Confirm again -> 400
+PUT {{baseUrl}}/bookings/{{booking1Id}}/confirm
+Authorization: Bearer {{customerToken}}
+
+
+###############################################
+# CANCEL JOB 2
+###############################################
+
+### Customer: cancel booking 2 -> 200, status = cancelled
+PUT {{baseUrl}}/bookings/{{booking2Id}}/status
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{ "status": "cancelled" }
+
+### Request 2 is now closed -> 200, status = closed
+GET {{baseUrl}}/requests/{{request2Id}}
+Authorization: Bearer {{customerToken}}
+
+### Cancel again -> 400
+PUT {{baseUrl}}/bookings/{{booking2Id}}/status
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{ "status": "cancelled" }
+
+
+###############################################
+# FAILURE CASES
+###############################################
+
+### Request 3 with a quote that is NOT accepted yet
+# @name createRequest3
+POST {{baseUrl}}/requests
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{
+  "description": "Water heater pipe connection needs replacing",
+  "location": "Vanasthalipuram",
+  "category": "{{categoryId}}"
+}
+
+### Provider: quote request 3 -> 201 (stays pending)
+# @name createQuote3
+POST {{baseUrl}}/quotes
+Authorization: Bearer {{providerToken}}
+Content-Type: application/json
+
+{ "requestId": "{{request3Id}}", "price": 800 }
+
+### Book a pending quote -> 400
+POST {{baseUrl}}/bookings
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{
+  "quoteId": "{{quote3Id}}",
+  "start": "{{$datetime iso8601 3 d}}",
+  "end": "{{$datetime iso8601 73 h}}"
+}
+
+### Book without token -> 401
+POST {{baseUrl}}/bookings
+Content-Type: application/json
+
+{ "quoteId": "{{quote1Id}}", "start": "{{$datetime iso8601 1 d}}", "end": "{{$datetime iso8601 25 h}}" }
+
+### Provider creates a booking -> 403
+POST {{baseUrl}}/bookings
+Authorization: Bearer {{providerToken}}
+Content-Type: application/json
+
+{ "quoteId": "{{quote1Id}}", "start": "{{$datetime iso8601 1 d}}", "end": "{{$datetime iso8601 25 h}}" }
+
+### Other customer books this quote -> 403
+POST {{baseUrl}}/bookings
+Authorization: Bearer {{customer2Token}}
+Content-Type: application/json
+
+{ "quoteId": "{{quote1Id}}", "start": "{{$datetime iso8601 1 d}}", "end": "{{$datetime iso8601 25 h}}" }
+
+### Book a quote whose request is already closed -> 400
+POST {{baseUrl}}/bookings
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{ "quoteId": "{{quote1Id}}", "start": "{{$datetime iso8601 3 d}}", "end": "{{$datetime iso8601 73 h}}" }
+
+### End before start -> 400
+POST {{baseUrl}}/bookings
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{ "quoteId": "{{quote3Id}}", "start": "{{$datetime iso8601 2 d}}", "end": "{{$datetime iso8601 1 d}}" }
+
+### Start in the past -> 400
+POST {{baseUrl}}/bookings
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{ "quoteId": "{{quote3Id}}", "start": "2020-01-01T10:00:00.000Z", "end": "2020-01-01T11:00:00.000Z" }
+
+### Invalid quote id -> 400
+POST {{baseUrl}}/bookings
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{ "quoteId": "123", "start": "{{$datetime iso8601 1 d}}", "end": "{{$datetime iso8601 25 h}}" }
+
+### Quote that does not exist -> 404
+POST {{baseUrl}}/bookings
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{ "quoteId": "000000000000000000000000", "start": "{{$datetime iso8601 1 d}}", "end": "{{$datetime iso8601 25 h}}" }
+
+### Other customer views the booking -> 403
+GET {{baseUrl}}/bookings/{{booking1Id}}
+Authorization: Bearer {{customer2Token}}
+
+### Other customer lists all bookings (admin only) -> 403
+GET {{baseUrl}}/bookings
+Authorization: Bearer {{customer2Token}}
+
+### Admin changes a status -> 403
+PUT {{baseUrl}}/bookings/{{booking1Id}}/status
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{ "status": "cancelled" }
+
+### Invalid status value -> 400
+PUT {{baseUrl}}/bookings/{{booking1Id}}/status
+Authorization: Bearer {{providerToken}}
+Content-Type: application/json
+
+{ "status": "scheduled" }
+
+### Invalid booking id -> 400
+GET {{baseUrl}}/bookings/123
+Authorization: Bearer {{customerToken}}
+
+### Booking that does not exist -> 404
+GET {{baseUrl}}/bookings/000000000000000000000000
+Authorization: Bearer {{customerToken}}

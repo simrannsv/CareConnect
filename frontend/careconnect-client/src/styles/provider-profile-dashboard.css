@@ -1,0 +1,109 @@
+.provider-profile {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 2rem 1rem;
+}
+
+.pp-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+}
+
+.pp-header h1 {
+    font-size: 2rem;
+    color: #333;
+    margin: 0;
+}
+
+.pp-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.pp-section {
+    background: white;
+    border: 1px solid #e0d4f7;
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 2px 8px rgba(147, 112, 219, 0.1);
+}
+
+.pp-section h2 {
+    font-size: 1.2rem;
+    color: #333;
+    margin: 0 0 1rem 0;
+    border-bottom: 2px solid #9370db;
+    padding-bottom: 0.5rem;
+}
+
+.pp-display p {
+    margin: 0.5rem 0;
+    color: #666;
+}
+
+.pp-display strong {
+    color: #333;
+}
+
+.pp-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.pp-form label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    color: #333;
+    font-weight: 500;
+}
+
+.pp-form input,
+.pp-form textarea {
+    padding: 0.75rem;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 0.95rem;
+    font-family: inherit;
+}
+
+.pp-form input:focus,
+.pp-form textarea:focus {
+    outline: none;
+    border-color: #9370db;
+}
+
+.pp-actions {
+    display: flex;
+    gap: 1rem;
+    padding: 1.5rem;
+    background: #f9f7fc;
+    border-radius: 8px;
+}
+
+.cc-btn-secondary {
+    background: #ddd;
+    color: #333;
+    padding: 0.75rem 1.5rem;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.cc-btn-secondary:hover {
+    background: #bbb;
+}
+
+.cc-success {
+    background: #e8f5e9;
+    border: 1px solid #4caf50;
+    border-radius: 8px;
+    padding: 1rem;
+    color: #2e7d32;
+    margin-bottom: 1rem;
+}
