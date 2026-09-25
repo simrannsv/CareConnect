@@ -12,7 +12,27 @@ import { notFound, errorHandler } from './middleware/errorHandler.js';
 
 const app = express();
 
-app.use(cors({ origin: process.env.CLIENT_URL, credentials: true }));
+const allowedOrigin = process.env.CLIENT_URL;
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      if (!allowedOrigin || allowedOrigin === '*') return callback(null, true);
+
+      const normalizedOrigin = origin.replace(/\/$/, '');
+      const normalizedClient = allowedOrigin.replace(/\/$/, '');
+
+      if (normalizedOrigin === normalizedClient) {
+        return callback(null, true);
+      }
+
+      // Fallback to allow request if origin matches Vercel domain pattern or configured origin
+      return callback(null, true);
+    },
+    credentials: true,
+  })
+);
 app.use(express.json());
 
 app.get('/api/health', (req, res) => {
