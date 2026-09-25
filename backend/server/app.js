@@ -35,12 +35,27 @@ app.use(
 );
 app.use(express.json());
 
+import { seedDatabase } from './seed/seedDemo.js';
+
 app.get('/api/health', (req, res) => {
   res.json({
     success: true,
     data: { status: 'ok', uptime: process.uptime() },
     message: 'CareConnect API running',
   });
+});
+
+app.get('/api/seed', async (req, res, next) => {
+  try {
+    const stats = await seedDatabase();
+    res.json({
+      success: true,
+      data: stats,
+      message: 'Cloud database seeded successfully with demo providers and admin account!',
+    });
+  } catch (err) {
+    next(err);
+  }
 });
 
 app.use('/api/auth', authRoutes);
